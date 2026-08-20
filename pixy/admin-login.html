@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pixy — Admin Login</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <div class="page-card">
+      <h2 class="page-title">Admin Login</h2>
+      <p class="page-subtitle">Use the secure local admin panel for daily shop management.</p>
+      <label class="page-label" for="adminEmail">Email</label>
+      <input class="page-input" id="adminEmail" type="email" placeholder="Enter admin email" />
+
+      <label class="page-label" for="adminPassword">Password</label>
+      <input class="page-input" id="adminPassword" type="password" placeholder="Enter password" />
+
+      <button class="page-button" id="loginBtn">Login</button>
+      <div id="loginMsg" class="form-message"></div>
+      <a class="pill-btn" href="index.html" style="display:block; text-align:center; margin-top:15px;">Back to home</a>
+    </div>
+  </div>
+
+  <script>
+    const loginBtn = document.getElementById('loginBtn');
+    const loginMsg = document.getElementById('loginMsg');
+    const adminEmailInput = document.getElementById('adminEmail');
+    const adminPasswordInput = document.getElementById('adminPassword');
+
+    function showMessage(text, type) {
+      loginMsg.textContent = text;
+      loginMsg.className = `form-message show ${type}`;
+    }
+
+    function hashPassword(value) {
+      const plain = String(value || '');
+      try {
+        return btoa(encodeURIComponent(plain));
+      } catch (error) {
+        return plain;
+      }
+    }
+
+    function getStoredAdmins() {
+      try {
+        const saved = localStorage.getItem('pixy_admin_accounts');
+        return saved ? JSON.parse(saved) : [];
+      } catch (error) {
+        console.warn('Could not read saved admins:', error);
+        return [];
+      }
+    }
+
+    function saveStoredAdmins(admins) {
+      localStorage.setItem('pixy_admin_accounts', JSON.stringify(admins));
+    }
+
+    function ensureDefaultAdmin() {
+      const admins = getStoredAdmins();
+      if (admins.length === 0) {
+        const defaultAdmin = { name: 'Super Admin', email: 'admin@pixy.com', password: hashPassword('admin123'), role: 'super_admin' };
+        saveStoredAdmins([defaultAdmin]);
+        return [defaultAdmin];
+      }
+      return admins;
+    }
+
+    loginBtn.addEventListener('click', () => {
+      const email = adminEmailInput.value.trim().toLowerCase();
+      const password = adminPasswordInput.value.trim();
+
+      if (!email || !password) {
+        showMessage('Please enter both email and password.', 'error');
+        return;
+      }
+
+      const admins = ensureDefaultAdmin();
+      const foundAdmin = admins.find((admin) => admin.email && admin.email.toLowerCase() === email && admin.password === hashPassword(password));
+
+      if (foundAdmin) {
+        localStorage.setItem('pixy_active_admin', JSON.stringify({ name: foundAdmin.name, email: foundAdmin.email, role: foundAdmin.role }));
+        window.location.href = 'admin-dashboard.html';
+      } else {
+        showMessage('Admin account not found. Check email and password.', 'error');
+      }
+    });
+  </script>
+</body>
+</html>

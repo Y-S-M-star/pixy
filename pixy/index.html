@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<title>pixy</title>
+
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <div class="shop-name"><strong>pixy</strong></div>
+        </div>
+        <div class="header-right">
+            <a class="pill-btn" href="customer.html">Customer Login</a>
+            <a class="pill-btn" href="admin-login.html">Admin</a>
+        </div>
+    </header>
+ 
+    <div class="hero">
+        <div class="hero-tag">WELCOME TO PIXY</div>
+        <div class="hero-caption">Discover the latest collection of products and enjoy exclusive offers.</div>
+    </div>
+ 
+    <div class="status-card">
+        <div class="status-row">
+            <span class="dot"></span>
+            <span class="status-label" id="statusLabel">OPEN NOW</span>
+        </div>
+        <div class="countdown" id="countdownText">loading...</div>
+        <div class="desc">We are currently open and ready to serve you. Explore our products and enjoy a seamless shopping experience.</div>
+        <!-- تم إصلاح الرابط هنا ليذهب إلى products.html -->
+        <a class="shop-now-btn" href="products.html">Shop Now</a>
+    </div>
+ 
+    <div class="feature-card" onclick="window.location.href='Coupons.html'">
+        <div class="feature-icon">🎫</div>
+        <div class="feature-body">
+            <div class="feature-title">coupons</div>
+            <div class="feature-sub">earn points & get exclusive</div>
+        </div>
+    </div>
+ 
+    <div class="feature-card" onclick="window.location.href='offers.html'">
+        <div class="feature-icon">🔥</div>
+        <div class="feature-body">
+            <div class="feature-title">see offers</div>
+            <div class="feature-sub">discover our latest deals and promotions</div>
+        </div>
+    </div>
+
+    <div class="feature-card" onclick="window.location.href='shisha.html'">
+        <div class="feature-icon">💨</div>
+        <div class="feature-body">
+            <div class="feature-title">shisha rental</div>
+            <div class="feature-sub">rent shisha for your events</div>
+        </div>
+    </div>
+ 
+    <div class="info-row">
+        <div class="info-box">
+            <div class="info-label">location</div>
+            <div class="info-value">19 saint thomas street</div>
+        </div>
+        <div class="info-box">
+            <div class="info-label">hours</div>
+            <div class="info-value">9:30am - 9:00pm</div>
+        </div>
+        <div class="info-box">
+            <div class="info-label">contact</div>
+            <div class="info-value">+44 *** ***</div>
+        </div>
+    </div>
+ 
+    <script>
+        const OPEN_HOUR = 9.5;
+        const CLOSE_HOUR = 21;
+        function updateStatus(){
+            const now = new Date();
+            const h = now.getHours() + now.getMinutes() / 60;
+            const isOpen = h >= OPEN_HOUR && h < CLOSE_HOUR;
+            const label = document.getElementById('statusLabel');
+            const countdown = document.getElementById('countdownText');
+            const dot = document.querySelector('.dot');
+            if(isOpen){
+                label.textContent = 'OPEN NOW';
+                dot.style.background = '#d4ff2b';
+                let closeTime = new Date(now);
+                closeTime.setHours(Math.floor(CLOSE_HOUR), (CLOSE_HOUR % 1) * 60, 0, 0);
+                const diffMs = closeTime - now;
+                const hoursLeft = Math.floor(diffMs / 3600000);
+                const minsLeft = Math.floor((diffMs % 3600000) / 60000);
+                countdown.innerHTML = `Closing in <b>${hoursLeft}h ${minsLeft}m</b>`;
+            } else {
+                label.textContent = 'CLOSED';
+                dot.style.background = '#5c5c5c';
+                let openTime = new Date(now);
+                openTime.setHours(Math.floor(OPEN_HOUR), (OPEN_HOUR % 1) * 60, 0, 0);
+                if(now > openTime) openTime.setDate(openTime.getDate() + 1);
+                const diffMs = openTime - now;
+                const hoursLeft = Math.floor(diffMs / 3600000);
+                const minsLeft = Math.floor((diffMs % 3600000) / 60000);
+                countdown.innerHTML = `Opens in <b>${hoursLeft}h ${minsLeft}m</b>`;
+            }
+        }
+        updateStatus();
+        setInterval(updateStatus, 60000);
+    </script>
+    <script type="module" src="firebase-init.js"></script>
+</body>
+</html>

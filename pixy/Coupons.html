@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <title>🎫 Coupons</title>
+    <style>
+        /* تم استخدام style.css كأساس، وتم تخصيص القليل هنا فقط */
+        .coupon-container {
+            max-width: 460px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .coupon-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            padding: 30px 20px;
+            color: white;
+            margin-bottom: 25px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .coupon-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+            animation: shimmer 8s infinite linear;
+            pointer-events: none;
+        }
+        @keyframes shimmer {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .coupon-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 4px 18px;
+            border-radius: 30px;
+            font-size: 12px;
+            font-weight: 600;
+            position: relative;
+            z-index: 1;
+        }
+        .coupon-discount {
+            font-size: 52px;
+            font-weight: 900;
+            position: relative;
+            z-index: 1;
+            margin: 10px 0;
+        }
+        .coupon-discount span { font-size: 24px; font-weight: 600; }
+        .coupon-code {
+            background: rgba(255,255,255,0.25);
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            display: inline-block;
+            margin: 12px 0 8px;
+            border: 2px dashed rgba(255,255,255,0.3);
+            position: relative;
+            z-index: 1;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        .coupon-code:hover { background: rgba(255,255,255,0.35); transform: scale(1.05); }
+        .coupon-expiry {
+            font-size: 13px;
+            opacity: 0.85;
+            position: relative;
+            z-index: 1;
+        }
+        .copy-btn {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.3s;
+            margin-top: 10px;
+            position: relative;
+            z-index: 1;
+        }
+        .copy-btn:hover { transform: scale(1.05); }
+
+        .visits-info {
+            background: #151515;
+            border: 1px solid #262626;
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .visits-info .number {
+            font-size: 36px;
+            font-weight: 900;
+            color: #f2f2f2;
+        }
+        .visits-info .number span { color: #d4ff2b; }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #262626;
+            border-radius: 10px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            background: linear-gradient(90deg, #d4ff2b, #667eea);
+            border-radius: 10px;
+            transition: width 0.6s ease;
+        }
+        .visit-dots {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #262626;
+            transition: 0.3s;
+        }
+        .dot.active { background: #d4ff2b; box-shadow: 0 0 12px rgba(212,255,43,0.5); }
+        .dot.future { background: #262626; border: 2px dashed #5c5c5c; }
+        .message {
+            padding: 12px;
+            border-radius: 12px;
+            margin-top: 15px;
+            font-size: 14px;
+            font-weight: 600;
+            display: none;
+        }
+        .message.success { display: block; background: rgba(212,255,43,.12); color: #d4ff2b; border: 1px solid rgba(212,255,43,.25); }
+        .message.error { display: block; background: rgba(255,80,80,.12); color: #ff9d9d; border: 1px solid rgba(255,80,80,.25); }
+    </style>
+</head>
+<body>
+
+    <div class="coupon-container">
+        <div class="page-header">
+            <div>
+                <div class="page-title">🎫 Coupons</div>
+                <div class="page-subtitle">The more you visit, the higher your discount!</div>
+            </div>
+            <a class="pill-btn" href="index.html">Home</a>
+        </div>
+
+        <div class="coupon-card" id="couponCard">
+            <div class="coupon-badge" id="tierBadge">🆕 new visitor</div>
+            <div class="coupon-discount" id="discountDisplay">10<span>%</span></div>
+            <div class="coupon-code" id="couponCode" onclick="copyCoupon()">WELCOME10</div>
+            <div class="coupon-expiry">
+                ⏳ valid until: <span id="expiryDate">next week</span>
+            </div>
+            <br>
+            <button class="copy-btn" onclick="copyCoupon()">📋 Copy Coupon</button>
+        </div>
+
+        <!-- تم حذف زر المحاكاة وزر إعادة التعيين -->
+        <div class="visits-info">
+            <div class="label">Your Visits</div>
+            <div class="number" id="visitCount">0 <span>/ 3</span></div>
+            <div class="progress-bar">
+                <div class="fill" id="progressFill" style="width: 0%"></div>
+            </div>
+            <div class="visit-dots" id="visitDots">
+                <div class="dot" data-index="0"></div>
+                <div class="dot" data-index="1"></div>
+                <div class="dot" data-index="2"></div>
+                <div class="dot" data-index="3"></div>
+                <div class="dot" data-index="4"></div>
+            </div>
+        </div>
+
+        <div id="message" class="message"></div>
+    </div>
+
+    <script type="module">
+    import { db } from './firebase-init.js';
+    import { doc, onSnapshot } from 'https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js';
+
+    const CUSTOMER_KEY = 'pixy_customer_account'; // same key customer.html saves
+    const TIERS = [
+        { visits: 0, discount: 10, badge: '🆕 new visitor', code: 'WELCOME10' },
+        { visits: 1, discount: 10, badge: '🔄 returning customer', code: 'WELCOME10' },
+        { visits: 2, discount: 15, badge: '⭐ loyal customer', code: 'LOYAL15' },
+        { visits: 3, discount: 20, badge: '👑 VIP customer', code: 'VIP20' },
+    ];
+
+    function getWeeklyCode(baseCode) {
+        const now = new Date();
+        const startOfYear = new Date(now.getFullYear(), 0, 1);
+        const days = Math.floor((now - startOfYear) / 86400000);
+        return baseCode + Math.ceil((days + 1) / 7);
+    }
+
+    function getExpiryDate() {
+        const now = new Date();
+        const end = new Date(now);
+        end.setDate(now.getDate() + (7 - now.getDay()));
+        end.setHours(23, 59, 59, 999);
+        return end.toLocaleDateString('en-uk', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    function getTier(visits) {
+        const v = Math.min(visits, 3);
+        let tier = TIERS[0];
+        for (let t of TIERS) if (v >= t.visits) tier = t;
+        return tier;
+    }
+
+    function updateUI(visits) {
+        const tier = getTier(visits);
+        document.getElementById('visitCount').innerHTML = `${visits} <span>/ 3</span>`;
+        document.getElementById('progressFill').style.width = Math.min((visits / 3) * 100, 100) + '%';
+        document.querySelectorAll('.dot').forEach((dot, i) => {
+            dot.className = 'dot';
+            dot.classList.add(i < visits ? 'active' : 'future');
+        });
+        const code = getWeeklyCode(tier.code);
+        document.getElementById('couponCode').textContent = code;
+        document.getElementById('couponCode').dataset.code = code;
+        document.getElementById('discountDisplay').innerHTML = `${tier.discount}<span>%</span>`;
+        document.getElementById('tierBadge').textContent = tier.badge;
+        document.getElementById('expiryDate').textContent = getExpiryDate();
+    }
+
+    function showLoggedOutState() {
+        document.querySelector('.coupon-container').innerHTML = `
+            <div class="page-header">
+                <div>
+                    <div class="page-title">🎫 Coupons</div>
+                    <div class="page-subtitle">Log in to see your coupon</div>
+                </div>
+                <a class="pill-btn" href="index.html">Home</a>
+            </div>
+            <div class="visits-info">
+                <p>You need a customer account to see your visits and coupon.</p>
+                <a class="page-button" href="customer.html" style="display:inline-block; margin-top:10px;">Go to Customer Login</a>
+            </div>`;
+    }
+
+    window.copyCoupon = function() {
+        const code = document.getElementById('couponCode').dataset.code;
+        if (!code) return;
+        navigator.clipboard?.writeText(code)
+            .then(() => showMessage(`✅ Coupon copied: ${code}`, 'success'))
+            .catch(() => copyFallback(code));
+    };
+
+    function copyFallback(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); showMessage(`✅ Coupon copied: ${text}`, 'success'); }
+        catch { showMessage(`❌ Failed to copy. Coupon: ${text}`, 'error'); }
+        document.body.removeChild(ta);
+    }
+
+    function showMessage(text, type) {
+        const msg = document.getElementById('message');
+        msg.textContent = text;
+        msg.className = 'message ' + type;
+        clearTimeout(msg._t);
+        msg._t = setTimeout(() => { msg.className = 'message'; }, 5000);
+    }
+
+    const saved = localStorage.getItem(CUSTOMER_KEY);
+    if (!saved) {
+        showLoggedOutState();
+    } else {
+        try {
+            const account = JSON.parse(saved);
+            onSnapshot(doc(db, 'customers', account.accountId), (snap) => {
+                updateUI(snap.exists() ? (snap.data().visits || 0) : 0);
+            });
+        } catch {
+            showLoggedOutState();
+        }
+    }
+</script>
+</body>
+</html>

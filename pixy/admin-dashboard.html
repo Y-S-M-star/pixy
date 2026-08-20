@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <title>Pixy — Admin Dashboard</title>
+</head>
+<body class="page-shell">
+    <div class="page-header">
+        <div>
+            <div class="page-title">Admin Dashboard</div>
+            <div class="page-subtitle">Daily shop operations: stock, orders and staff</div>
+        </div>
+        <div class="header-actions">
+            <button class="pill-btn" onclick="exportBackup()">Export Backup</button>
+            <label class="pill-btn" style="cursor:pointer;">
+                Import Backup
+                <input type="file" id="backupFileInput" accept="application/json" style="display:none" onchange="importBackup(event)">
+            </label>
+            <button class="pill-btn" onclick="logoutAdmin()">Logout</button>
+        </div>
+    </div>
+
+    <div class="tab-bar">
+        <div class="tab-btn active" onclick="switchTab('products')">Products</div>
+        <div class="tab-btn" onclick="switchTab('orders')">Orders</div>
+        <div class="tab-btn" onclick="switchTab('admins')">Admins</div>
+    </div>
+
+    <div id="tab-products" class="tab-content active">
+        <button class="page-button secondary" onclick="openModal('productModal')">+ Add Product</button>
+        <div id="productList" class="admin-grid"></div>
+    </div>
+
+    <div id="tab-orders" class="tab-content">
+        <div id="ordersSummary" class="summary-card"></div>
+        <div id="orderList" class="admin-grid"></div>
+    </div>
+
+    <div id="tab-admins" class="tab-content">
+        <button class="page-button secondary" onclick="openModal('adminModal')">+ Add Admin</button>
+        <div id="adminList" class="admin-grid"></div>
+    </div>
+
+    <div id="productModal" class="admin-modal">
+        <div class="admin-modal-content">
+            <span class="close-modal" onclick="closeModal('productModal')">&times;</span>
+            <h3 id="productModalTitle">Add Product</h3>
+            <input type="hidden" id="editProductId">
+            <label class="page-label">Product Name</label>
+            <input class="page-input" id="prodName">
+            <label class="page-label">Price (£)</label>
+            <input class="page-input" id="prodPrice" type="number">
+            <label class="page-label">Stock</label>
+            <input class="page-input" id="prodStock" type="number" min="0">
+            <label class="page-label">Description</label>
+            <input class="page-input" id="prodDesc">
+            <label class="page-label">
+                <input type="checkbox" id="prodOffer" style="margin-right:6px;">
+                Mark as offer
+            </label>
+            <button class="page-button" onclick="saveProduct()">Save</button>
+        </div>
+    </div>
+
+    <div id="adminModal" class="admin-modal">
+        <div class="admin-modal-content">
+            <span class="close-modal" onclick="closeModal('adminModal')">&times;</span>
+            <h3>Add New Admin</h3>
+            <label class="page-label">Name</label>
+            <input class="page-input" id="adminName">
+            <label class="page-label">Email</label>
+            <input class="page-input" id="adminEmail">
+            <label class="page-label">Password</label>
+            <input class="page-input" id="adminPassword" type="password">
+            <button class="page-button" onclick="saveAdmin()">Save Admin</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { db } from './firebase-init.js';
+        import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js';
+
+        // Security Check
+        const activeAdmin = JSON.parse(localStorage.getItem('pixy_active_admin'));
+        if (!activeAdmin || (activeAdmin.role !== 'super_admin' && activeAdmin.role !== 'admin_level2')) {
+            window.location.href = 'admin-login.html';
+        }
+
+        // Real-time listeners
+        const productsCol = collection(db, 'products');
+        const ordersCol = collection(db, 'orders');
+        const adminsCol = collection(db, 'admins');
+
+        // --- Products ---
+        onSnapshot(productsCol, (snapshot) => {
+            const products = [];
+            snapshot.forEach((doc) => {
+                products.push({ id: doc.id, ...doc.data() });
+            });
+            renderProducts(products);
+        });
+
+        function renderProducts(products) {
+            const list = document.getElementById('productList');
+            if (!products.length) {
+                list.innerHTML = '<div class="loading-text">No products yet.</div>';
+                return;
+            }
+            list.innerHTML = '';
+            products.forEach((product) => {
+                const el = document.createElement('div');
+                el.className = 'admin-item';
+                const stockLabel = product.stock <= 3 ? '<span class="warning-badge">Low stock</span>' : '';
+                el.innerHTML = `
+                    <div class="admin-item-info">
+                        <strong>${product.name}</strong> - £${product.price}
+                        <div style="font-size:12px; color:#9a9a9a;">${product.description || ''}</div>
+                        <div style="font-size:12px; color:#d4ff2b; margin-top:4px;">Stock: ${product.stock ?? 0} ${stockLabel}</div>
+                        ${product.is_offer ? '<div style="font-size:11px; color:#d4ff2b; margin-top:4px;">★ Offer</div>' : ''}
+                    </div>
+                    <div class="admin-item-actions">
+                        <button class="btn-edit" onclick="editProduct('${product.id}', '${product.name}', '${product.price}', '${product.description || ''}', ${Boolean(product.is_offer)}, ${Number(product.stock ?? 0)})">Edit</button>
+                        <button class="btn-delete" onclick="deleteProduct('${product.id}')">Delete</button>
+                    </div>
+                `;
+                list.appendChild(el);
+            });
+        }
+
+        // --- Orders ---
+        const ordersQuery = query(ordersCol, orderBy('createdAt', 'desc'));
+        onSnapshot(ordersQuery, (snapshot) => {
+            const orders = [];
+            snapshot.forEach((doc) => {
+                orders.push({ id: doc.id, ...doc.data() });
+            });
+            renderOrders(orders);
+        });
+
+        function renderOrders(orders) {
+            const list = document.getElementById('orderList');
+            const summary = document.getElementById('ordersSummary');
+            const pending = orders.filter((order) => order.status === 'Pending').length;
+            const ready = orders.filter((order) => order.status === 'Ready').length;
+            summary.innerHTML = `
+                <div class="summary-row">
+                    <div><strong>${orders.length}</strong><div class="small-text">Total Orders</div></div>
+                    <div><strong>${pending}</strong><div class="small-text">Pending</div></div>
+                    <div><strong>${ready}</strong><div class="small-text">Ready</div></div>
+                </div>
+            `;
+            if (!orders.length) {
+                list.innerHTML = '<div class="loading-text">No orders yet.</div>';
+                return;
+            }
+            list.innerHTML = '';
+            orders.forEach((order) => {
+                const el = document.createElement('div');
+                el.className = 'admin-item';
+                const time = order.createdAt?.toDate?.()?.toLocaleString() || 'Just now';
+                el.innerHTML = `
+                    <div class="admin-item-info">
+                        <strong>${order.customerName}</strong> <span style="font-size:11px; color:#5c5c5c;">${time}</span>
+                        <div style="font-size:12px; color:#9a9a9a;">${order.phone || ''} • ${order.email || ''}</div>
+                        <div style="font-size:12px; color:#9a9a9a;">Item: ${order.items?.map((item) => `${item.name} x${item.qty}`).join(', ') || 'No items'}</div>
+                        <div style="font-size:12px; color:#d4ff2b; margin-top:4px;">Total: £${order.total.toFixed(2)} • ${order.paymentMethod}</div>
+                    </div>
+                    <div class="admin-item-actions">
+                        <select onchange="updateOrderStatus('${order.id}', this.value)">
+                            <option value="Pending" ${order.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                            <option value="Confirmed" ${order.status === 'Confirmed' ? 'selected' : ''}>Confirmed</option>
+                            <option value="Ready" ${order.status === 'Ready' ? 'selected' : ''}>Ready</option>
+                            <option value="Delivered" ${order.status === 'Delivered' ? 'selected' : ''}>Delivered</option>
+                        </select>
+                    </div>
+                `;
+                list.appendChild(el);
+            });
+        }
+
+        // --- Admins ---
+        onSnapshot(adminsCol, (snapshot) => {
+            const admins = [];
+            snapshot.forEach((doc) => {
+                admins.push({ id: doc.id, ...doc.data() });
+            });
+            renderAdmins(admins);
+        });
+
+        function renderAdmins(admins) {
+            const list = document.getElementById('adminList');
+            const filtered = admins.filter((admin) => admin.role !== 'super_admin');
+            if (!filtered.length) {
+                list.innerHTML = '<div class="loading-text">No extra admins.</div>';
+                return;
+            }
+            list.innerHTML = '';
+            filtered.forEach((admin) => {
+                const el = document.createElement('div');
+                el.className = 'admin-item';
+                el.innerHTML = `
+                    <div class="admin-item-info">
+                        <strong>${admin.name}</strong> - ${admin.email}
+                        <div style="font-size:12px; color:#9a9a9a;">Role: ${admin.role}</div>
+                    </div>
+                    <div class="admin-item-actions">
+                        <button class="btn-delete" onclick="deleteAdmin('${admin.id}')">Delete</button>
+                    </div>
+                `;
+                list.appendChild(el);
+            });
+        }
+
+        // --- Actions ---
+        window.switchTab = function(tab) {
+            document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
+        };
+
+        window.openModal = (id) => document.getElementById(id).classList.add('show');
+        window.closeModal = (id) => document.getElementById(id).classList.remove('show');
+
+        window.saveProduct = async () => {
+            const id = document.getElementById('editProductId').value;
+            const name = document.getElementById('prodName').value.trim();
+            const price = parseFloat(document.getElementById('prodPrice').value);
+            const stock = parseInt(document.getElementById('prodStock').value, 10) || 0;
+            const description = document.getElementById('prodDesc').value.trim();
+            const isOffer = document.getElementById('prodOffer').checked;
+            if (!name || !price) return alert('Name and Price required');
+
+            const productData = { name, price, stock, description, is_offer: isOffer };
+            try {
+                if (id) {
+                    await updateDoc(doc(db, 'products', id), productData);
+                } else {
+                    await addDoc(collection(db, 'products'), productData);
+                }
+                closeModal('productModal');
+                document.getElementById('editProductId').value = '';
+                document.getElementById('prodName').value = '';
+                document.getElementById('prodPrice').value = '';
+                document.getElementById('prodStock').value = '';
+                document.getElementById('prodDesc').value = '';
+                document.getElementById('prodOffer').checked = false;
+            } catch (error) {
+                alert('Error saving product: ' + error.message);
+            }
+        };
+
+        window.editProduct = (id, name, price, desc, isOffer, stock) => {
+            document.getElementById('editProductId').value = id;
+            document.getElementById('prodName').value = name;
+            document.getElementById('prodPrice').value = price;
+            document.getElementById('prodStock').value = stock;
+            document.getElementById('prodDesc').value = desc;
+            document.getElementById('prodOffer').checked = Boolean(isOffer);
+            document.getElementById('productModalTitle').textContent = 'Edit Product';
+            openModal('productModal');
+        };
+
+        window.deleteProduct = async (id) => {
+            if (confirm('Delete this product?')) {
+                await deleteDoc(doc(db, 'products', id));
+            }
+        };
+
+        window.updateOrderStatus = async (id, status) => {
+            await updateDoc(doc(db, 'orders', id), { status });
+        };
+
+        window.saveAdmin = async () => {
+            const name = document.getElementById('adminName').value.trim();
+            const email = document.getElementById('adminEmail').value.trim().toLowerCase();
+            const password = document.getElementById('adminPassword').value;
+            if (!name || !email || !password) return alert('All fields required');
+            
+            const hashed = btoa(encodeURIComponent(password));
+            await addDoc(collection(db, 'admins'), {
+                name, email, password: hashed, role: 'admin_level2'
+            });
+            closeModal('adminModal');
+            document.getElementById('adminName').value = '';
+            document.getElementById('adminEmail').value = '';
+            document.getElementById('adminPassword').value = '';
+        };
+
+        window.deleteAdmin = async (id) => {
+            if (confirm('Remove this admin?')) {
+                await deleteDoc(doc(db, 'admins', id));
+            }
+        };
+
+        window.exportBackup = async () => {
+            const products = (await getDocs(productsCol)).docs.map(d => ({ id: d.id, ...d.data() }));
+            const orders = (await getDocs(ordersCol)).docs.map(d => ({ id: d.id, ...d.data() }));
+            const admins = (await getDocs(adminsCol)).docs.map(d => ({ id: d.id, ...d.data() }));
+            const payload = { exportedAt: new Date().toISOString(), products, orders, admins };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'pixy-backup.json';
+            link.click();
+            URL.revokeObjectURL(url);
+        };
+
+        window.importBackup = (event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async () => {
+                try {
+                    const data = JSON.parse(reader.result);
+                    if (data.products) {
+                        for (const p of data.products) {
+                            await addDoc(productsCol, p);
+                        }
+                    }
+                    if (data.orders) {
+                        for (const o of data.orders) {
+                            await addDoc(ordersCol, o);
+                        }
+                    }
+                    if (data.admins) {
+                        for (const a of data.admins) {
+                            await addDoc(adminsCol, a);
+                        }
+                    }
+                    alert('Backup restored successfully.');
+                } catch (error) {
+                    alert('Backup file is invalid: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        };
+
+        window.logoutAdmin = () => {
+            localStorage.removeItem('pixy_active_admin');
+            window.location.href = 'admin-login.html';
+        };
+    </script>
+</body>
+</html>

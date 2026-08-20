@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+<title>Pixy — Admin QR Scan</title>
+</head>
+<body class="page-shell">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Admin Panel</div>
+      <div class="page-subtitle">Scan a customer QR code to register one visit</div>
+    </div>
+    <a class="pill-btn" href="index.html">Home</a>
+  </div>
+
+  <div class="status-msg" id="connectionStatus">Connecting to database…</div>
+
+  <div class="page-card">
+    <button class="page-button" id="startScanBtn">Start Camera Scan</button>
+    <div id="reader" class="qr-reader"></div>
+    <div id="scanStatus" class="status-msg">Waiting for a QR code…</div>
+    <div id="scanResult" class="scan-result">No scan yet.</div>
+  </div>
+
+  <div class="page-card">
+    <label class="page-label" style="margin-bottom:12px;">Recent customer visits</label>
+    <div id="customerList"></div>
+  </div>
+
+  <button class="page-button secondary" id="resetBtn">Reset All Visits</button>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <script type="module">
+    import { db } from './firebase-init.js';
+    import { doc, getDoc, setDoc, updateDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js';
+
+    // Security Check: Only allow if admin is logged in
+    const activeAdmin = JSON.parse(localStorage.getItem('pixy_active_admin'));
+    if (!activeAdmin) {
+        window.location.href = 'admin-login.html';
+    }
+
+    const VISITS_NEEDED_FOR_COUPON = 3;
+    const scanStatus = document.getElementById('scanStatus');
+    const scanResult = document.getElementById('scanResult');
+    const reader = document.getElementById('reader');
+    let scanner = null;
+
+    document.getElementById('connectionStatus').textContent = 'Connected to Pixy Firestore';
+
+    document.getElementById('startScanBtn').addEventListener('click', async () => {
+      if (!window.Html5Qrcode) {
+        scanStatus.textContent = 'Camera scanner is not available right now.';
+        return;
+      }
+      scanner = new window.Html5Qrcode('reader');
+      try {
+        const devices = await window.Html5Qrcode.getCameras();
+        if (!devices || devices.length === 0) {
+          scanStatus.textContent = 'No camera found on this device.';
+          return;
+        }
+        scanStatus.textContent = 'Scanning…';
+        await scanner.start(
+          devices[0].id,
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          async (decodedText) => {
+            scanResult.innerHTML = `<strong>Scanned:</strong> ${decodedText}`;
+            scanStatus.textContent = 'Visit registered';
+            await registerVisit(decodedText);
+            await scanner.stop();
+          },
+          () => {}
+        );
+      } catch (error) {
+        scanStatus.textContent = 'Unable to start camera.';
+        console.error(error);
+      }
+    });
+
+    async function registerVisit(customerId) {
+      const customerRef = doc(db, 'customers', customerId);
+      const snapshot = await getDoc(customerRef);
+      if (snapshot.exists()) {
+        const currentVisits = snapshot.data().visits || 0;
+        await updateDoc(customerRef, { visits: currentVisits + 1 });
+      } else {
+        await setDoc(customerRef, { visits: 1, name: 'Unknown User', email: 'unknown@email.com', accountId: customerId });
+      }
+      renderCustomerList();
+    }
+
+    document.getElementById('resetBtn').addEventListener('click', async () => {
+      if (!confirm('Reset all visit counts for a new week?')) return;
+      const customersCol = collection(db, 'customers');
+      const snapshot = await getDocs(customersCol);
+      snapshot.forEach(async (d) => {
+        await updateDoc(doc(db, 'customers', d.id), { visits: 0 });
+      });
+      renderCustomerList();
+    });
+
+    async function renderCustomerList() {
+      const customersCol = collection(db, 'customers');
+      const snapshot = await getDocs(customersCol);
+      const listEl = document.getElementById('customerList');
+      listEl.innerHTML = '';
+      if (snapshot.empty) {
+        listEl.innerHTML = '<div class="customer-visits">No customers yet.</div>';
+        return;
+      }
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        const customerId = docSnap.id;
+        const name = data.name || customerId;
+        const visits = data.visits || 0;
+        const hasCoupon = visits >= VISITS_NEEDED_FOR_COUPON;
+        const row = document.createElement('div');
+        row.className = 'customer-row';
+        row.innerHTML = `
+          <div>
+            <div class="customer-name">${name}</div>
+            <div class="customer-visits">${visits} visit${visits === 1 ? '' : 's'} this week</div>
+          </div>
+          ${hasCoupon ? '<span class="coupon-badge">10% OFF</span>' : ''}
+        `;
+        listEl.appendChild(row);
+      });
+    }
+    renderCustomerList();
+  </script>
+</body>
+</html>

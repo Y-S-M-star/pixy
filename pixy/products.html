@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Products</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-shell">
+    <div class="page-header">
+        <div>
+            <div class="page-title">Our Products</div>
+            <div class="page-subtitle">Browse the menu and place a cash order</div>
+        </div>
+        <a class="pill-btn" href="index.html">Home</a>
+    </div>
+
+    <div class="page-card">
+        <label class="page-label" for="productSelect">Choose item</label>
+        <select class="page-input" id="productSelect"></select>
+
+        <label class="page-label" for="orderQty">Quantity</label>
+        <input class="page-input" id="orderQty" type="number" min="1" value="1">
+
+        <label class="page-label" for="customerName">Customer Name</label>
+        <input class="page-input" id="customerName" type="text" placeholder="Enter your name">
+
+        <label class="page-label" for="customerPhone">Phone</label>
+        <input class="page-input" id="customerPhone" type="tel" placeholder="Enter phone number">
+
+        <label class="page-label" for="customerEmail">Email</label>
+        <input class="page-input" id="customerEmail" type="email" placeholder="Enter email">
+
+        <label class="page-label" for="orderNote">Note</label>
+        <input class="page-input" id="orderNote" type="text" placeholder="Optional note">
+
+        <label class="page-label" style="display:flex; align-items:center; gap:10px; font-weight:600;">
+            <input type="checkbox" id="deliveryCheckbox" />
+            Request delivery (minimum 8 items)
+        </label>
+        <div id="deliveryAddressBox" style="display:none; margin-bottom: 12px;">
+            <label class="page-label" for="deliveryAddress">Delivery address</label>
+            <input class="page-input" id="deliveryAddress" type="text" placeholder="Enter delivery address">
+        </div>
+
+        <button class="page-button" id="placeOrderBtn">Place Cash Order</button>
+        <div id="orderMessage" class="form-message"></div>
+    </div>
+
+    <div id="productsContainer" class="products-grid"></div>
+
+    <script type="module">
+        import { db } from './firebase-init.js';
+        import { collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, doc, getDoc, updateDoc } from 'https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js';
+
+        const container = document.getElementById('productsContainer');
+        const productSelect = document.getElementById('productSelect');
+        const orderQty = document.getElementById('orderQty');
+        const customerName = document.getElementById('customerName');
+        const customerPhone = document.getElementById('customerPhone');
+        const customerEmail = document.getElementById('customerEmail');
+        const orderNote = document.getElementById('orderNote');
+        const deliveryCheckbox = document.getElementById('deliveryCheckbox');
+        const deliveryAddressBox = document.getElementById('deliveryAddressBox');
+        const deliveryAddress = document.getElementById('deliveryAddress');
+        const orderMessage = document.getElementById('orderMessage');
+        const placeOrderBtn = document.getElementById('placeOrderBtn');
+
+        // Load products from Firestore (collection 'products')
+        const productsCol = collection(db, 'products');
+        let allProducts = [];
+
+        onSnapshot(productsCol, (snapshot) => {
+            allProducts = [];
+            snapshot.forEach((doc) => {
+                allProducts.push({ id: doc.id, ...doc.data() });
+            });
+            renderProducts();
+        });
+
+        function renderProducts() {
+            productSelect.innerHTML = '';
+            container.innerHTML = '';
+            
+            if (!allProducts.length) {
+                container.innerHTML = '<div class="loading-text">No products available yet.</div>';
+                return;
+            }
+
+            allProducts.forEach((product) => {
+                const option = document.createElement('option');
+                option.value = product.id;
+                option.textContent = `${product.name} • £${product.price} • Stock ${product.stock ?? 0}`;
+                productSelect.appendChild(option);
+
+                const card = document.createElement('div');
+                card.className = 'product-card';
+                card.innerHTML = `
+                    <div class="product-info">
+                        <h4>${product.name}</h4>
+                        <p>${product.description || ''}</p>
+                        <span class="price">£${product.price}</span>
+                        <div class="small-text">Stock: ${product.stock ?? 0}</div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function showMessage(text, type) {
+            orderMessage.textContent = text;
+            orderMessage.className = `form-message show ${type}`;
+            setTimeout(() => {
+                orderMessage.className = 'form-message';
+            }, 5000);
+        }
+
+        deliveryCheckbox.addEventListener('change', () => {
+            deliveryAddressBox.style.display = deliveryCheckbox.checked ? 'block' : 'none';
+        });
+
+        placeOrderBtn.addEventListener('click', async () => {
+            const selectedId = productSelect.value;
+            const selectedProduct = allProducts.find((p) => p.id === selectedId);
+            const qty = parseInt(orderQty.value, 10) || 1;
+            const customerNameValue = customerName.value.trim();
+            const customerPhoneValue = customerPhone.value.trim();
+            const customerEmailValue = customerEmail.value.trim();
+            const wantsDelivery = deliveryCheckbox.checked;
+            const deliveryAddressValue = deliveryAddress.value.trim();
+
+            if (!selectedProduct) {
+                showMessage('Please select a product.', 'error');
+                return;
+            }
+            if (!customerNameValue || !customerPhoneValue) {
+                showMessage('Name and phone are required for the cash order.', 'error');
+                return;
+            }
+            if (wantsDelivery && qty < 8) {
+                showMessage('Delivery is available only for 8 or more items.', 'error');
+                return;
+            }
+            if (wantsDelivery && !deliveryAddressValue) {
+                showMessage('Please enter a delivery address.', 'error');
+                return;
+            }
+            if ((selectedProduct.stock ?? 0) < qty) {
+                showMessage('Not enough stock for this quantity.', 'error');
+                return;
+            }
+
+            const total = selectedProduct.price * qty + (wantsDelivery ? 5 : 0);
+
+            try {
+                await addDoc(collection(db, 'orders'), {
+                    customerName: customerNameValue,
+                    phone: customerPhoneValue,
+                    email: customerEmailValue,
+                    note: orderNote.value.trim(),
+                    paymentMethod: wantsDelivery ? 'Delivery - Cash on delivery' : 'Cash on pickup',
+                    status: 'Pending',
+                    createdAt: serverTimestamp(),
+                    items: [{ id: selectedProduct.id, name: selectedProduct.name, price: selectedProduct.price, qty }],
+                    total: total,
+                    delivery: wantsDelivery,
+                    deliveryAddress: wantsDelivery ? deliveryAddressValue : null
+                });
+
+                const productRef = doc(db, 'products', selectedProduct.id);
+                await updateDoc(productRef, { stock: (selectedProduct.stock ?? 0) - qty });
+
+                showMessage(`Order placed successfully! Total: £${total.toFixed(2)}`, 'success');
+
+                customerName.value = '';
+                customerPhone.value = '';
+                customerEmail.value = '';
+                orderNote.value = '';
+                orderQty.value = '1';
+                deliveryCheckbox.checked = false;
+                deliveryAddress.value = '';
+                deliveryAddressBox.style.display = 'none';
+            } catch (error) {
+                console.error(error);
+                showMessage('Failed to place order. Please try again.', 'error');
+            }
+        });
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="stylesheet" href="style.css">
+    <title>offers</title>
+    <style>
+        body { padding: 20px; background: #0a0a0a; color: #f2f2f2; }
+        .hero {
+            background: url('offer.jpg') center/cover, #1a1a1a;
+            text-align: center; padding: 50px 20px; width: 100%; max-width: 55vh;
+            height: 35vh; 
+            margin: 0 auto 30px auto;
+        }
+
+        .hero-tag { font-size: 20px; font-weight: 900; color: #d4ff2b; background: rgba(0,0,0,0.4); padding: 8px 28px; border-radius: 30px; margin-bottom: 12px; }
+        .hero-caption { font-size: 14px; color: #aaa; background: rgba(0,0,0,0.5); padding: 9px 18px; border-radius: 12px; max-width: 90%; }
+        .filter-section { max-width: 55vh; margin: 0 auto 25px auto; display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; background: #151515; padding: 16px 20px; border-radius: 16px; border: 1px solid #262626; }
+        .filter-section input, .filter-section select { padding: 10px 16px; border: 1px solid #262626; border-radius: 12px; font-size: 15px; background: #0d0d0d; color: #f2f2f2; flex: 1; min-width: 140px; }
+        .filter-section button { background: #d4ff2b; color: #0a0a0a; border: none; padding: 10px 24px; border-radius: 12px; font-weight: 700; cursor: pointer; }
+        .offers-grid { max-width: 55vh; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+        .offer-card { background: #151515; border-radius: 16px; padding: 18px 20px; border: 1px solid #262626; display: flex; align-items: center; gap: 16px; cursor: pointer; }
+        .offer-icon { width: 50px; height: 50px; border-radius: 14px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+        .offer-info { flex: 1; }
+        .offer-info h4 { font-size: 17px; color: #f2f2f2; margin-bottom: 4px; }
+        .offer-info .category-tag { font-size: 12px; font-weight: 600; color: #d4ff2b; background: rgba(212,255,43,.1); padding: 2px 14px; border-radius: 30px; display: inline-block; margin-bottom: 4px; }
+        .offer-info .price { font-size: 18px; font-weight: 800; color: #d4ff2b; }
+        .offer-info .desc { font-size: 13px; color: #9a9a9a; }
+        .no-results { text-align: center; padding: 40px 20px; color: #888; background: #151515; border-radius: 16px; border: 1px solid #262626; }
+        .result-count { text-align: center; font-size: 14px; color: #6c7a8a; margin-top: 10px; max-width: 55vh; margin-left: auto; margin-right: auto; }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <div class="hero-tag">🔥 OFFERS</div>
+        <div class="hero-caption">/latest offers and discounts on your favorite products</div>
+    </div>
+
+    <div class="filter-section">
+        <input type="text" id="searchInput" placeholder="🔍 search for a product..." />
+        <select id="categoryFilter">
+            <option value="all">📂 all offers</option>
+            <option value="drinks">🥤 drinks</option>
+            <option value="snacks">🍿 snacks</option>
+            <option value="nec">🚬 nec</option>
+            <option value="food">🍔 food</option>
+            <option value="household">🧹 household</option>
+        </select>
+        <button class="reset-btn" onclick="document.getElementById('searchInput').value=''; document.getElementById('categoryFilter').value='all'; renderOffers();">↺ reset</button>
+    </div>
+
+    <div class="offers-grid" id="offersGrid"></div>
+    <div class="result-count" id="resultCount"></div>
+
+    <script type="module">
+        import { db } from './firebase-init.js';
+        import { collection, onSnapshot } from 'https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js';
+
+        const grid = document.getElementById('offersGrid');
+        const searchInput = document.getElementById('searchInput');
+        const categoryFilter = document.getElementById('categoryFilter');
+        const resultCount = document.getElementById('resultCount');
+        let offers = [];
+
+        const categoryEmoji = { drinks: '🥤', snacks: '🍿', nec: '🚬', food: '🍔', household: '🧹' };
+        const categoryColor = { drinks: '#dbeafe', snacks: '#fce7f3', nec: '#e0e7ff', food: '#d1fae5', household: '#fef3c7' };
+
+        // Real-time listener for offers from the products collection
+        const offersCol = collection(db, 'products');
+        onSnapshot(offersCol, (snapshot) => {
+            offers = [];
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const isOffer = data.is_offer === true || data.isOffer === true || data.offer === true;
+                if (isOffer) {
+                    offers.push({ id: doc.id, ...data });
+                }
+            });
+            renderOffers();
+        });
+
+        function renderOffers() {
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            const selectedCategory = categoryFilter.value;
+
+            const filtered = offers.filter(offer => {
+                const title = offer.title || offer.name || 'Offer';
+                const desc = offer.desc || offer.description || '';
+                const category = offer.category || offer.type || 'general';
+                const matchSearch = title.toLowerCase().includes(searchTerm) ||
+                                    desc.toLowerCase().includes(searchTerm);
+                const matchCategory = selectedCategory === 'all' || category === selectedCategory;
+                return matchSearch && matchCategory;
+            });
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `<div class="no-results">😕 No matching offers found</div>`;
+            } else {
+                grid.innerHTML = filtered.map(offer => {
+                    const title = offer.title || offer.name || 'Offer';
+                    const desc = offer.desc || offer.description || 'No details yet.';
+                    const category = offer.category || offer.type || 'general';
+                    const price = offer.price;
+                    return `
+                        <div class="offer-card" onclick="alert('Offer: ${title}\nPrice: £${price}')">
+                            <div class="offer-icon" style="background: ${categoryColor[category] || '#eee'}">
+                                ${categoryEmoji[category] || '📦'}
+                            </div>
+                            <div class="offer-info">
+                                <h4>${title}</h4>
+                                <span class="category-tag">${categoryEmoji[category] || ''} ${category}</span>
+                                <div class="price">£${price}</div>
+                                <div class="desc">${desc}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            resultCount.textContent = `🔄 Showing ${filtered.length} of ${offers.length} offers`;
+        }
+
+        searchInput.addEventListener('input', renderOffers);
+        categoryFilter.addEventListener('change', renderOffers);
+    </script>
+</body>
+</html>

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css" />
+  <title>Pixy — Customer Account</title>
+  <style>
+    .form-section { display: block; }
+    .form-section.hidden { display: none; }
+    .customer-panel { display: none; text-align:center; }
+    .customer-panel.show { display: block; }
+    .qr-box {
+        margin: 16px auto;
+        max-width: 220px;
+        padding: 16px;
+        border-radius: 16px;
+        background: #fff;
+        color: #0a0a0a;
+        font-weight: 700;
+        text-align: center;
+        display: inline-block;
+    }
+    .logout-btn {
+        background: transparent;
+        border: 1px solid var(--danger);
+        color: var(--danger);
+        padding: 5px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    .logout-btn:hover { background: var(--danger); color: white; }
+  </style>
+</head>
+<body class="page-shell">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Customer Account</div>
+      <div class="page-subtitle">View your personal QR code for visits</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+        <a class="pill-btn" href="index.html">Home</a>
+        <button class="logout-btn" id="logoutBtn">Exit</button>
+    </div>
+  </div>
+
+  <!-- قسم إنشاء الحساب -->
+  <div class="page-card form-section" id="formSection">
+    <label class="page-label">Name</label>
+    <input class="page-input" type="text" id="customerName" placeholder="Enter your name" />
+
+    <label class="page-label">Email</label>
+    <input class="page-input" type="email" id="customerEmail" placeholder="Enter your email" />
+
+    <label class="page-label">Password</label>
+    <input class="page-input" type="password" id="customerPassword" placeholder="Create a password" />
+
+    <button class="page-button" id="createAccountBtn">Create Account</button>
+    <div id="formMessage" class="form-message" aria-live="polite"></div>
+  </div>
+
+  <!-- قسم عرض البيانات -->
+  <div class="page-card customer-panel" id="customerPanel">
+    <div class="small">Welcome</div>
+    <h2 id="customerWelcomeName">-</h2>
+    <div class="small">Your account is ready</div>
+    
+    <div class="account-box" style="margin: 15px 0;">
+      <div class="account-item">
+        <span class="account-label">Email</span>
+        <div id="customerEmailDisplay">-</div>
+      </div>
+    </div>
+
+    <div class="qr-box" id="customerQrCode">
+        <div style="color:#000;">Loading QR...</div>
+    </div>
+    <div class="small" style="margin-top:10px;">Show this QR code to the admin when you visit.</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script type="module">
+    import { db } from './firebase-init.js';
+    import { doc, setDoc, query, collection, where, getDocs } from 'https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js';
+
+    const STORAGE_KEY = 'pixy_customer_account';
+    const formSection = document.getElementById('formSection');
+    const createAccountBtn = document.getElementById('createAccountBtn');
+    const customerNameInput = document.getElementById('customerName');
+    const customerEmailInput = document.getElementById('customerEmail');
+    const customerPasswordInput = document.getElementById('customerPassword');
+    const customerPanel = document.getElementById('customerPanel');
+    const customerWelcomeName = document.getElementById('customerWelcomeName');
+    const customerEmailDisplay = document.getElementById('customerEmailDisplay');
+    const customerQrCode = document.getElementById('customerQrCode');
+    const formMessage = document.getElementById('formMessage');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    function showMessage(text, type) {
+      formMessage.textContent = text;
+      formMessage.className = `form-message ${type}`;
+    }
+
+    function renderQrCode(text) {
+      customerQrCode.innerHTML = '';
+      if (window.QRCode) {
+        new window.QRCode(customerQrCode, {
+          text: text, width: 180, height: 180,
+          colorDark: '#000000', colorLight: '#ffffff',
+          correctLevel: window.QRCode.CorrectLevel.H
+        });
+      } else {
+        customerQrCode.innerHTML = '<div style="color:#000;">QR library loading...</div>';
+      }
+    }
+
+    function showAccountPanel(account) {
+      formSection.classList.add('hidden');
+      customerPanel.classList.add('show');
+      customerWelcomeName.textContent = account.name;
+      customerEmailDisplay.textContent = account.email;
+      renderQrCode(account.accountId);
+    }
+
+    function resetUI() {
+        localStorage.removeItem(STORAGE_KEY);
+        formSection.classList.remove('hidden');
+        customerPanel.classList.remove('show');
+        customerNameInput.value = '';
+        customerEmailInput.value = '';
+        customerPasswordInput.value = '';
+        showMessage('Logged out. You can create a new account or log in.', 'success');
+    }
+
+    logoutBtn.addEventListener('click', resetUI);
+
+    async function loadSavedAccount() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) return;
+      try {
+        const account = JSON.parse(saved);
+        if (account && account.accountId) {
+          showAccountPanel(account);
+          showMessage('Welcome back!', 'success');
+        }
+      } catch (error) { console.error('Error reading saved account', error); }
+    }
+
+    createAccountBtn.addEventListener('click', async () => {
+      const name = customerNameInput.value.trim();
+      const email = customerEmailInput.value.trim();
+      const password = customerPasswordInput.value.trim();
+      if (!name || !email || !password) { showMessage('Please enter name, email, and password.', 'error'); return; }
+
+      const accountId = `PIXY-${Math.floor(1000 + Math.random() * 9000)}`;
+      const account = { name, email, password, accountId, createdAt: new Date().toISOString(), visits: 0 };
+
+      try {
+        const q = query(collection(db, 'customers'), where('email', '==', email));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          const existingData = querySnapshot.docs[0].data();
+          const savedAccount = {
+            ...existingData,
+            name: existingData.name || name,
+            email: existingData.email || email,
+            password: existingData.password || password,
+            accountId: existingData.accountId || accountId
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(savedAccount));
+          showAccountPanel(savedAccount);
+          showMessage('Welcome back!', 'success');
+          return;
+        }
+
+        try {
+          await setDoc(doc(db, 'customers', accountId), account);
+        } catch (firestoreError) {
+          console.warn('Firestore save failed, using local fallback:', firestoreError);
+        }
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(account));
+        showAccountPanel(account);
+        showMessage('Account created successfully.', 'success');
+      } catch (err) {
+        console.error(err);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(account));
+        showAccountPanel(account);
+        showMessage('Account saved locally. You can continue using it.', 'success');
+      }
+    });
+
+    loadSavedAccount();
+  </script>
+</body>
+</html>

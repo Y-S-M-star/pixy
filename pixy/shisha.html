@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <title>Shisha Rental</title>
+    <style>
+        body {
+            margin: 0; padding: 0;
+            background-color: #000;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        
+        #bgVideo {
+            position: fixed; right: 0; bottom: 0;
+            min-width: 100%; min-height: 100%;
+            z-index: -1; object-fit: cover; opacity: 0.4;
+        }
+
+        .page-shell {
+            max-width: 460px;
+            padding: 20px;
+            background: rgba(21, 21, 21, 0.85);
+            border-radius: 20px;
+            border: 1px solid #262626;
+            backdrop-filter: blur(5px);
+        }
+
+        .hero-center {
+            text-align: center;
+            padding: 30px 15px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #262626;
+        }
+        .hero-tag {
+            font-size: 24px;
+            font-weight: 800;
+            color: #d4ff2b;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+        .hero-caption {
+            font-size: 14px;
+            color: #9a9a9a;
+            line-height: 1.6;
+        }
+
+        .input-box { text-align: center; margin-bottom: 15px; }
+        .input-box label { display: block; font-size: 13px; color: #9a9a9a; margin-bottom: 5px; }
+        .page-input {
+            width: 100%; max-width: 280px;
+            padding: 10px; border-radius: 8px;
+            border: 1px solid #262626; background: #0d0d0d;
+            color: #f2f2f2; margin: 0 auto; display: block;
+        }
+        .small-note { font-size: 12px; color: #5c5c5c; margin-top: 5px; }
+
+        .summary-box {
+            margin: 15px auto;
+            padding: 12px; border-radius: 8px;
+            background: rgba(212, 255, 43, 0.1);
+            border: 1px solid #262626; color: #f2f2f2;
+            font-size: 14px; text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <video id="bgVideo" autoplay muted loop playsinline>
+        <source src="shisha.mp4" type="video/mp4" style="object-fit: cover; width: 100%; height: 100%;">
+        Your browser does not support the video tag.
+    </video>
+
+    <div class="page-shell">
+        <div class="hero-center">
+            <div class="hero-tag">LIGHT UP & RELAX</div>
+            <div class="hero-caption">
+                Rent our premium shisha for your next gathering!<br>
+                Just <strong style="color: #d4ff2b;">£25</strong> for a top-notch experience.
+            </div>
+        </div>
+
+        <div class="input-box">
+            <label>Phone number</label>
+            <input type="text" id="phoneInput" class="page-input" placeholder="Enter your phone">
+        </div>
+
+        <div class="input-box">
+            <label>How many hours?</label>
+            <input type="number" id="hoursInput" class="page-input" min="2" value="2">
+            <div class="small-note">Minimum 2 hours</div>
+        </div>
+
+        <div class="input-box">
+            <label>Choose flavor</label>
+            <select id="flavorSelect" class="page-input">
+                <option value="Mint">Mint</option>
+                <option value="Blueberry">Blueberry</option>
+                <option value="Grape">Grape</option>
+                <option value="Double Apple">Double Apple</option>
+                <option value="Watermelon">Watermelon</option>
+            </select>
+        </div>
+
+        <div class="input-box" style="margin-bottom: 20px;">
+            <input type="checkbox" id="deliveryCheckbox">
+            <label for="deliveryCheckbox" style="display:inline; color:#9a9a9a;"> Need delivery?</label>
+        </div>
+
+        <div id="deliveryAddressBox" class="input-box" style="display: none;">
+            <label>Delivery address</label>
+            <input type="text" id="addressInput" class="page-input" placeholder="Enter your address">
+        </div>
+
+        <div id="summaryBox" class="summary-box"></div>
+
+        <button id="confirmBtn" class="page-button" style="max-width:200px; margin: 10px auto; display:block;">Confirm Rental</button>
+    </div>
+
+    <script type="module">
+        import { db } from './firebase-init.js';
+        import { collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js';
+
+        const deliveryCheckbox = document.getElementById('deliveryCheckbox');
+        const deliveryAddressBox = document.getElementById('deliveryAddressBox');
+        const hoursInput = document.getElementById('hoursInput');
+        const flavorSelect = document.getElementById('flavorSelect');
+        const summaryBox = document.getElementById('summaryBox');
+        const phoneInput = document.getElementById('phoneInput');
+        const addressInput = document.getElementById('addressInput');
+        const confirmBtn = document.getElementById('confirmBtn');
+
+        function calculateTotal(hours, delivery) {
+            const h = Math.max(2, Number(hours) || 2);
+            let total = 25;
+            if (h > 2) total += (h - 2) * 10;
+            if (delivery) total += 5;
+            return total;
+        }
+
+        function updateSummary() {
+            const hours = hoursInput.value || 2;
+            const flavor = flavorSelect.value;
+            const delivery = deliveryCheckbox.checked;
+            const total = calculateTotal(hours, delivery);
+            summaryBox.innerHTML = `Hours: <b>${hours}</b> • Flavor: <b>${flavor}</b><br>Total: <b style="color:#d4ff2b;">£${total}</b>`;
+        }
+
+        hoursInput.addEventListener('input', updateSummary);
+        flavorSelect.addEventListener('change', updateSummary);
+        deliveryCheckbox.addEventListener('change', function() {
+            deliveryAddressBox.style.display = this.checked ? 'block' : 'none';
+            updateSummary();
+        });
+
+        confirmBtn.addEventListener('click', async () => {
+            const phone = phoneInput.value.trim();
+            const hours = Number(hoursInput.value) || 2;
+            const flavor = flavorSelect.value;
+            const delivery = deliveryCheckbox.checked;
+            const address = addressInput.value.trim();
+
+            if (!phone) { alert('Please enter a phone number'); return; }
+            if (delivery && !address) { alert('Please enter a delivery address'); return; }
+
+            const total = calculateTotal(hours, delivery);
+            const order = { phone, hours, flavor, delivery, address: delivery ? address : null, total, status: 'pending', createdAt: serverTimestamp() };
+
+            try {
+                await addDoc(collection(db, 'orders'), order);
+                summaryBox.innerHTML += `<br><span style="color:#d4ff2b;">✅ Order sent successfully!</span>`;
+                phoneInput.value = ''; addressInput.value = '';
+            } catch (err) {
+                console.error(err); alert('Could not save order. Try again.');
+            }
+        });
+        updateSummary();
+    </script>
+</body>
+</html>
